@@ -1,11 +1,19 @@
 import re
 from urllib.parse import urlparse
 
+# receives a URL and corresponding Web response. parse the web response, extract enough information from the page
+# to be able to answer the questions for the report
+# lastly, return the list of URLs scapped
 def scraper(url, resp):
+    print("hi")
     links = extract_next_links(url, resp)
     return [link for link in links if is_valid(link)]
 
+num_links = 0
+file_call = 0
+url_already_parsed = set()
 def extract_next_links(url, resp):
+    print("\n\n" + url + "\n\n")
     # Implementation required.
     # url: the URL that was used to get the page
     # resp.url: the actual url of the page
@@ -15,16 +23,86 @@ def extract_next_links(url, resp):
     #         resp.raw_response.url: the url, again
     #         resp.raw_response.content: the content of the page!
     # Return a list with the hyperlinks (as strings) scrapped from resp.raw_response.content
-    return list()
 
+    link_list = []
+
+    if (resp.status != 200):
+        print("Problem getting page.")
+        return link_list
+
+    # website_content = str(resp.raw_response.content).split(" ")
+    decode_site = resp.raw_response.content.decode('utf-8', errors = 'ignore')
+
+    
+    https_pattern = r'(https?://[^\s]+)'
+    found = re.findall(https_pattern, decode_site)
+
+    
+    
+    for i in found:
+        if i not in url_already_parsed:
+            i = i[i.find("http"): ]
+            if (i.find("\"") != -1):
+                i = i[0: i.find("\"") ]
+            # elif (i.find("\'") != -1):
+            #     i = i[0: i.find("\'") ]
+            if (i.find("#") != -1):
+                i = i[: i.find("#")]
+            i = i.replace("\\/", '/').replace("\\", "")
+            link_list.append(i)
+    
+    for i in link_list:
+        print(i)
+    
+
+    global num_links, file_call
+
+    num_links += len(link_list)
+    file_call += 1
+        
+    print("Links: " + str(num_links))
+    print("File called: " + str(file_call))
+    return link_list
+
+# 
+check = 0
+url_current = ""
 def is_valid(url):
+    global url_current, check
+    check += 1
+    
+    # print("IS VALI/D CHECKING " + str(check))
     # Decide whether to crawl this url or not. 
     # If you decide to crawl it, return True; otherwise return False.
     # There are already some conditions that return False.
+
+
     try:
         parsed = urlparse(url)
         if parsed.scheme not in set(["http", "https"]):
             return False
+
+        accept_hostnames = [
+            r".*\.ics\.uci\.edu$",
+            r".*\.cs\.uci\.edu$",
+            r".*\.informatics\.uci\.edu$", 
+            r".*\.stat\.uci\.edu$",
+        ]
+
+        valid_hostname = False
+
+        for link in accept_hostnames:
+            if not parsed.hostname:
+                return False
+            if re.match(link, parsed.hostname):
+                valid_hostname = True
+            
+        
+        if not valid_hostname:
+            return False
+        
+        
+        
         return not re.match(
             r".*\.(css|js|bmp|gif|jpe?g|ico"
             + r"|png|tiff?|mid|mp2|mp3|mp4"
