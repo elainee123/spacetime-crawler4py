@@ -32,14 +32,16 @@ def extract_next_links(url, resp):
     if (resp.status != 200):
         print("Problem getting page.")
         return link_list
+
+        # test
     
     decode_site = resp.raw_response.content.decode('utf-8', errors = 'ignore')
 
     # makes sure that HTML is fully formed and doesn't have any issues
     parser = etree.HTMLParser()
 
-    with open('test.txt', 'a') as file:
-        file.write(str(len(decode_site)) + " " + resp.url + '\n')
+    with open('URL_Length.txt', 'a') as file:
+        file.write("Length of Site: " + str(len(decode_site)) + " URL: " + resp.url + '\n')
         
 
     
@@ -75,7 +77,7 @@ def extract_next_links(url, resp):
 
         bad_queries = {'utm_source', 'ref', 'session', 'sort', 'filter', 'Keywords', 'search', 'order', 'utm_medium', 'utm_campaign', 
         'q', 'search', 'from', 'share', 'ref_type', 'entry_point', 'outlook-ical', 'redirect_to', 'tab_files', 'tab_details', 'image', 
-        'ns', 'do', 'idx', 'redirect_to_referer', 'format', 'ical', 'src', 'C'}
+        'ns', 'do', 'idx', 'redirect_to_referer', 'format', 'ical', 'src', 'C', 'id'}
 
         new_query = []
 
@@ -141,11 +143,12 @@ def is_valid(url):
 
         bad_paths = ('/login', '/account', '/private', '/portal', '/search', '/timeline', 
         '/calendar', '/~dechter', '/commit', '/forks', '/events/', '/raw-attachment', '/tree', 
-        '/branches','/event' )
+        '/branches','/event', '/-/', '/pix' )
         if parsed.path.startswith(bad_paths) or '/commit/' in parsed.path:
             return False
             
-        
+        if parsed.netloc.endswith('gitlab.ics.uci.edu') and (parsed.path and parsed.path != '/'):
+            return False
 
         
         # actual one
@@ -156,13 +159,15 @@ def is_valid(url):
             if re.match(link, parsed.hostname):
                 if parsed.hostname not in unqiue_hostname:
                     unqiue_hostname.add(parsed.hostname)
+                    with open('unqiue_host.txt', 'a') as file:
+                        file.write("Hostname: " + parsed.hostname + '\n')
                 valid_hostname = True
 
         return ((not re.match(
             r".*\.(css|js|bmp|gif|jpe?g|ico"
             + r"|png|tiff?|mid|mp2|mp3|mp4"
             + r"|wav|avi|mov|mpeg|ram|m4v|mkv|ogg|ogv|pdf"
-            + r"|ps|eps|tex|ppt|pptx|doc|docx|xls|xlsx|names"
+            + r"|ps|eps|tex|ppt|pptx|doc|docx|xls|xlsx|names|ppsx|ppt"
             + r"|data|dat|exe|bz2|tar|msi|bin|7z|psd|dmg|iso"
             + r"|epub|dll|cnf|tgz|sha1"
             + r"|thmx|mso|arff|rtf|jar|csv"
