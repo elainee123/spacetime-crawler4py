@@ -1,19 +1,22 @@
 import re
-from urllib.parse import urlparse
-
+from lxml import etree
+from urllib.parse import urlparse, urljoin, parse_qsl, urlunparse, urlencode
 # receives a URL and corresponding Web response. parse the web response, extract enough information from the page
 # to be able to answer the questions for the report
 # lastly, return the list of URLs scapped
 def scraper(url, resp):
-    print("hi")
     links = extract_next_links(url, resp)
-    return [link for link in links if is_valid(link)]
+    return links
 
 num_links = 0
 file_call = 0
 url_already_parsed = set()
+raw_links_num = 0
 def extract_next_links(url, resp):
-    print("\n\n" + url + "\n\n")
+    print("\n\n" + resp.url + "\n\n")
+    global num_links, file_call, raw_links_num, unqiue_hostname
+
+
     # Implementation required.
     # url: the URL that was used to get the page
     # resp.url: the actual url of the page
@@ -23,52 +26,94 @@ def extract_next_links(url, resp):
     #         resp.raw_response.url: the url, again
     #         resp.raw_response.content: the content of the page!
     # Return a list with the hyperlinks (as strings) scrapped from resp.raw_response.content
-
-    link_list = []
+    file_call += 1
+    link_list = set()
 
     if (resp.status != 200):
         print("Problem getting page.")
         return link_list
-
-    # website_content = str(resp.raw_response.content).split(" ")
+    
     decode_site = resp.raw_response.content.decode('utf-8', errors = 'ignore')
 
-    
-    https_pattern = r'(https?://[^\s]+)'
-    found = re.findall(https_pattern, decode_site)
+    # makes sure that HTML is fully formed and doesn't have any issues
+    parser = etree.HTMLParser()
 
-    
-    
-    for i in found:
-        if i not in url_already_parsed:
-            i = i[i.find("http"): ]
-            if (i.find("\"") != -1):
-                i = i[0: i.find("\"") ]
-            # elif (i.find("\'") != -1):
-            #     i = i[0: i.find("\'") ]
-            if (i.find("#") != -1):
-                i = i[: i.find("#")]
-            i = i.replace("\\/", '/').replace("\\", "")
-            link_list.append(i)
-    
-    for i in link_list:
-        print(i)
-    
-
-    global num_links, file_call
-
-    num_links += len(link_list)
-    file_call += 1
+    with open('test.txt', 'a') as file:
+        file.write(str(len(decode_site)) + " " + resp.url + '\n')
         
+
+    
+    try: 
+        # makes a tree that now allows html attributes to be attainable 
+        tree = etree.fromstring(decode_site, parser)
+        if tree is None:
+            print("Error tree is none.")
+            return link_list
+    except Exception as e:
+        print("Error parsing HTML: ", e)
+        return link_list
+
+    # Gets the hyperlink out of tree
+    raw_links = tree.xpath("//a/@href")
+    raw_links_num += len(raw_links)
+    
+    
+    for i in raw_links:
+        # if i not in url_already_parsed:
+        # urljoin detects if i is a page directory instead of an absolute link and reconnects it
+        try:
+            abs_link = urljoin(resp.url, i)
+        except: 
+            print('error')
+            return list()
+        abs_link = urlparse(abs_link)
+
+
+
+        # abs_link = abs_link.split("#")[0]
+        query = parse_qsl(abs_link.query)
+
+        bad_queries = {'utm_source', 'ref', 'session', 'sort', 'filter', 'Keywords', 'search', 'order', 'utm_medium', 'utm_campaign', 
+        'q', 'search', 'from', 'share', 'ref_type', 'entry_point', 'outlook-ical', 'redirect_to', 'tab_files', 'tab_details', 'image', 
+        'ns', 'do', 'idx', 'redirect_to_referer', 'format', 'ical', 'src', 'C'}
+
+        new_query = []
+
+        for (key, value) in query:
+            if key not in bad_queries:
+                new_query.append((key,value))
+        
+        new_query = urlencode(new_query)
+
+        abs_link = urlunparse(abs_link._replace(query = new_query))
+        abs_link = abs_link.split('#')[0]
+
+        # gets rid of all repeated links and invalid links
+        if abs_link not in url_already_parsed:
+            url_already_parsed.add(abs_link)
+            if (is_valid(abs_link)):
+                print(abs_link)
+                link_list.add(abs_link)
+    
+    
+    num_links += len(link_list)
+
+    # data about the scan 
+    print("Length of Page: " + str(len(decode_site)))
+    print("Repeated Links: " + str(len(url_already_parsed)))    
+    print("Raw links: " + str(raw_links_num))
     print("Links: " + str(num_links))
     print("File called: " + str(file_call))
-    return link_list
+    print("Unqiue host called: " + str(len(unqiue_hostname)))
+    return list(link_list)
 
-# 
+
+
 check = 0
 url_current = ""
+unqiue_hostname = set()
 def is_valid(url):
-    global url_current, check
+    global url_current, check, unqiue_hostname
     check += 1
     
     # print("IS VALI/D CHECKING " + str(check))
@@ -91,19 +136,29 @@ def is_valid(url):
 
         valid_hostname = False
 
+        if "version=" in parsed.query or "action=diff" in parsed.query or "from=" in parsed.query or "date=" in parsed.query or "day=" in parsed.query:
+            return False
+
+        bad_paths = ('/login', '/account', '/private', '/portal', '/search', '/timeline', 
+        '/calendar', '/~dechter', '/commit', '/forks', '/events/', '/raw-attachment', '/tree', 
+        '/branches','/event' )
+        if parsed.path.startswith(bad_paths) or '/commit/' in parsed.path:
+            return False
+            
+        
+
+        
+        # actual one
+
         for link in accept_hostnames:
             if not parsed.hostname:
                 return False
             if re.match(link, parsed.hostname):
+                if parsed.hostname not in unqiue_hostname:
+                    unqiue_hostname.add(parsed.hostname)
                 valid_hostname = True
-            
-        
-        if not valid_hostname:
-            return False
-        
-        
-        
-        return not re.match(
+
+        return ((not re.match(
             r".*\.(css|js|bmp|gif|jpe?g|ico"
             + r"|png|tiff?|mid|mp2|mp3|mp4"
             + r"|wav|avi|mov|mpeg|ram|m4v|mkv|ogg|ogv|pdf"
@@ -111,7 +166,9 @@ def is_valid(url):
             + r"|data|dat|exe|bz2|tar|msi|bin|7z|psd|dmg|iso"
             + r"|epub|dll|cnf|tgz|sha1"
             + r"|thmx|mso|arff|rtf|jar|csv"
-            + r"|rm|smil|wmv|swf|wma|zip|rar|gz)$", parsed.path.lower())
+            + r"|rm|smil|wmv|swf|wma|zip|rar|gz)$", parsed.path.lower())) and valid_hostname) 
+
+        
 
     except TypeError:
         print ("TypeError for ", parsed)
