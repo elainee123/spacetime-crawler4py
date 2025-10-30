@@ -39,12 +39,7 @@ def extract_next_links(url, resp):
 
     # makes sure that HTML is fully formed and doesn't have any issues
     parser = etree.HTMLParser()
-
-    with open('URL_Length.txt', 'a') as file:
-        file.write("Length of Site: " + str(len(decode_site)) + " URL: " + resp.url + '\n')
         
-
-    
     try: 
         # makes a tree that now allows html attributes to be attainable 
         tree = etree.fromstring(decode_site, parser)
@@ -56,8 +51,18 @@ def extract_next_links(url, resp):
         return link_list
 
     # Gets the hyperlink out of tree
+    raw_words = " ".join(tree.itertext())
     raw_links = tree.xpath("//a/@href")
     raw_links_num += len(raw_links)
+
+    raw_words = raw_words.split()
+
+    with open('URL_Length.txt', 'a') as file:
+        file.write("Words: " + str(len(raw_words)) + " URL: " + resp.url + '\n')
+
+    if (len(raw_words) < 300):
+        return list()
+    
     
     
     for i in raw_links:
@@ -77,7 +82,7 @@ def extract_next_links(url, resp):
 
         bad_queries = {'utm_source', 'ref', 'session', 'sort', 'filter', 'Keywords', 'search', 'order', 'utm_medium', 'utm_campaign', 
         'q', 'search', 'from', 'share', 'ref_type', 'entry_point', 'outlook-ical', 'redirect_to', 'tab_files', 'tab_details', 'image', 
-        'ns', 'do', 'idx', 'redirect_to_referer', 'format', 'ical', 'src', 'C', 'id'}
+        'ns', 'do', 'idx', 'redirect_to_referer', 'format', 'ical', 'src', 'C', 'id', 'action'}
 
         new_query = []
 
@@ -101,7 +106,7 @@ def extract_next_links(url, resp):
     num_links += len(link_list)
 
     # data about the scan 
-    print("Length of Page: " + str(len(decode_site)))
+    print("Length of Page: " + str(len(raw_words)))
     print("Repeated Links: " + str(len(url_already_parsed)))    
     print("Raw links: " + str(raw_links_num))
     print("Links: " + str(num_links))
@@ -143,8 +148,8 @@ def is_valid(url):
 
         bad_paths = ('/login', '/account', '/private', '/portal', '/search', '/timeline', 
         '/calendar', '/~dechter', '/commit', '/forks', '/events/', '/raw-attachment', '/tree', 
-        '/branches','/event', '/-/', '/pix' )
-        if parsed.path.startswith(bad_paths) or '/commit/' in parsed.path:
+        '/branches','/event', '/-/')
+        if parsed.path.startswith(bad_paths) or '/commit/' in parsed.path or '/pix/' in parsed.path:
             return False
             
         if parsed.netloc.endswith('gitlab.ics.uci.edu') and (parsed.path and parsed.path != '/'):
