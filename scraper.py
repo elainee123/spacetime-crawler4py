@@ -12,6 +12,11 @@ num_links = 0
 file_call = 0
 url_already_parsed = set()
 raw_links_num = 0
+
+def is_num(number):
+    cleaned_num = number.replace("{", "").replace(",", "").replace("}", "").replace(".", "").replace("-", "").replace("(", "").replace(")", "").replace("$", "").replace("%", "")
+    return cleaned_num.isdigit()
+
 def extract_next_links(url, resp):
     print("\n\n" + resp.url + "\n\n")
     global num_links, file_call, raw_links_num, unqiue_hostname
@@ -31,6 +36,8 @@ def extract_next_links(url, resp):
 
     if (resp.status != 200):
         print("Problem getting page.")
+        with open('URL_Length.txt', 'a') as file:
+            file.write("Words: ERROR, "+ str(resp.status) + " " + " URL: " + resp.url + '\n')
         return link_list
 
         # test
@@ -45,24 +52,36 @@ def extract_next_links(url, resp):
         tree = etree.fromstring(decode_site, parser)
         if tree is None:
             print("Error tree is none.")
+            with open('URL_Length.txt', 'a') as file:
+                file.write("Words: Empty" + " URL: " + resp.url + '\n')
             return link_list
     except Exception as e:
         print("Error parsing HTML: ", e)
+        with open('URL_Length.txt', 'a') as file:
+            file.write("Words: ERROR!" + " URL: " + resp.url + '\n')
         return link_list
 
     # Gets the hyperlink out of tree
+    etree.strip_elements(tree, 'script', 'style', 'noscript', 'meta', 'link', 'header', 'footer', with_tail = False)
     raw_words = " ".join(tree.itertext())
     raw_links = tree.xpath("//a/@href")
     raw_links_num += len(raw_links)
 
     raw_words = raw_words.split()
 
+    numeric_words = sum(1 for word in raw_words if is_num(word))
+    num_total_words = len(raw_words)
+    percent_numeric = numeric_words / num_total_words if num_total_words > 0 else 0
+    if percent_numeric > .8:
+        with open('URL_Length.txt', 'a') as file:
+            file.write("Words: Dataset!" + " URL: " + resp.url + '\n')
+        return link_list
+    with open('file_words.txt', 'a') as file:
+        file.write(resp.url +  '\n' + str(len(raw_words)) + " " + str(raw_words) + '\n')
+
     with open('URL_Length.txt', 'a') as file:
         file.write("Words: " + str(len(raw_words)) + " URL: " + resp.url + '\n')
 
-    if (len(raw_words) < 300):
-        return list()
-    
     
     
     for i in raw_links:
@@ -71,8 +90,7 @@ def extract_next_links(url, resp):
         try:
             abs_link = urljoin(resp.url, i)
         except: 
-            print('error')
-            return list()
+            continue
         abs_link = urlparse(abs_link)
 
 
@@ -82,7 +100,7 @@ def extract_next_links(url, resp):
 
         bad_queries = {'utm_source', 'ref', 'session', 'sort', 'filter', 'Keywords', 'search', 'order', 'utm_medium', 'utm_campaign', 
         'q', 'search', 'from', 'share', 'ref_type', 'entry_point', 'outlook-ical', 'redirect_to', 'tab_files', 'tab_details', 'image', 
-        'ns', 'do', 'idx', 'redirect_to_referer', 'format', 'ical', 'src', 'C', 'id', 'action'}
+        'redirect_to_referer', 'format', 'ical', 'src', 'rev', 'C', 'do', 'ns', 'idx'}
 
         new_query = []
 
@@ -96,9 +114,9 @@ def extract_next_links(url, resp):
         abs_link = abs_link.split('#')[0]
 
         # gets rid of all repeated links and invalid links
-        if abs_link not in url_already_parsed:
-            url_already_parsed.add(abs_link)
-            if (is_valid(abs_link)):
+        if (is_valid(abs_link)):
+            if abs_link not in url_already_parsed:
+                url_already_parsed.add(abs_link)
                 print(abs_link)
                 link_list.add(abs_link)
     
@@ -116,12 +134,10 @@ def extract_next_links(url, resp):
 
 
 
-check = 0
 url_current = ""
 unqiue_hostname = set()
 def is_valid(url):
-    global url_current, check, unqiue_hostname
-    check += 1
+    global url_current, unqiue_hostname
     
     # print("IS VALI/D CHECKING " + str(check))
     # Decide whether to crawl this url or not. 
@@ -135,25 +151,30 @@ def is_valid(url):
             return False
 
         accept_hostnames = [
-            r".*\.ics\.uci\.edu$",
-            r".*\.cs\.uci\.edu$",
-            r".*\.informatics\.uci\.edu$", 
-            r".*\.stat\.uci\.edu$",
+            r".*\.?ics\.uci\.edu$",
+            r".*\.?cs\.uci\.edu$",
+            r".*\.?informatics\.uci\.edu$", 
+            r".*\.?stat\.uci\.edu$",
         ]
 
         valid_hostname = False
 
-        if "version=" in parsed.query or "action=diff" in parsed.query or "from=" in parsed.query or "date=" in parsed.query or "day=" in parsed.query:
+        if "version=" in parsed.query or "action=diff" in parsed.query or "from=" in parsed.query or "date=" in parsed.query or "day=" in parsed.query or "ns=" in parsed.query or "do=" in parsed.query or "idx=" in parsed.query:
             return False
 
-        bad_paths = ('/login', '/account', '/private', '/portal', '/search', '/timeline', 
-        '/calendar', '/~dechter', '/commit', '/forks', '/events/', '/raw-attachment', '/tree', 
-        '/branches','/event', '/-/')
-        if parsed.path.startswith(bad_paths) or '/commit/' in parsed.path or '/pix/' in parsed.path:
+        bad_paths = ('login', 'account', 'private', 'portal', 'timeline', 
+        'calendar', 'commit', 'forks', 'raw-attachment', 'tree', 
+        'branches', 'do', 'join', 'register', 'auth', 'pix', 'randomSmiles100K')
+        if ('events' in parsed.path.lower() and re.search(r'\d{4}-\d{2}', parsed.path)):
             return False
-            
-        if parsed.netloc.endswith('gitlab.ics.uci.edu') and (parsed.path and parsed.path != '/'):
-            return False
+        
+        path_segments = [segment.lower() for segment in parsed.path.strip('/').split('/')]
+        if parsed.path.startswith('/~wjohnson'):
+            if any('data' in segment for segment in path_segments):
+                return False
+        else:
+            if any(segment in bad_paths for segment in path_segments):
+                return False
 
         
         # actual one
